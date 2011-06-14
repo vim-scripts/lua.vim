@@ -25,6 +25,14 @@ local function isident(s)
   return type(s) == 'string' and s:find('^[A-Za-z_][A-Za-z_0-9]*$') and not keywords[s]
 end
 
+local function addmatch(word, kind, desc)
+  if not desc then
+    print(string.format("{'word':'%s','kind':'%s'}", word, kind))
+  else
+    print(string.format("{'word':'%s','kind':'%s','menu':'%s'}", word, kind, desc))
+  end
+end
+
 local function dump(table, path, cache)
   local printed = false
   for key, value in pairs(table) do
@@ -33,23 +41,28 @@ local function dump(table, path, cache)
       local vtype = type(value)
       if vtype == 'function' then
         printed = true
-        print(path .. "()")
+        addmatch(path, 'f', path .. '()')
       elseif vtype ~= 'table' then
         printed = true
-        print(path)
+        addmatch(path, 'v', nil)
       else
         if vtype == 'table' and not cache[value] then
           cache[value] = true
           if dump(value, path, cache) then
             printed = true
           else
-            print(path .. "[]")
+            addmatch(path, 'm', path .. '[]')
           end
         end
       end
     end
   end
   return printed
+end
+
+-- Add keywords to completion candidates.
+for kw, _ in pairs(keywords) do
+  addmatch(kw, 'k', nil)
 end
 
 -- Load installed modules.
@@ -59,7 +72,6 @@ for _, modulename in ipairs(arg) do
 end
 
 -- Generate completion candidates from global state.
-local cache = {}
-cache[_G] = true
-cache[package.loaded] = true
-dump(_G, nil, cache)
+local cache = { [_G] = true, [package.loaded] = true }
+local output = {}
+dump(_G, nil, cache, output)

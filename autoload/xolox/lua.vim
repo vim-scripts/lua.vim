@@ -79,12 +79,27 @@ function! xolox#lua#checksyntax() " {{{1
         execute 'silent make! -p' shellescape(expand('%'))
         cwindow
         execute winnr . 'wincmd w'
+        call s:highlighterrors()
       finally
         let &makeprg = mp_save
         let &errorformat = efm_save
       endtry
     endif
   endif
+endfunction
+
+function! s:highlighterrors()
+  let hlgroup = 'luaCompilerError'
+  if !hlexists(hlgroup)
+    execute 'highlight def link' hlgroup 'Error'
+  else
+    call clearmatches()
+  endif
+  let pattern = '^\%%%il.*\n\?'
+  for entry in getqflist()
+    call matchadd(hlgroup, '\%' . min([entry.lnum, line('$')]) . 'l')
+    call xolox#misc#msg#warn("%s: Syntax error on line %i: %s", s:script, entry.lnum, entry.text)
+  endfor
 endfunction
 
 function! xolox#lua#help() " {{{1
@@ -250,41 +265,43 @@ function! xolox#lua#completefunc(init, base) " {{{1
   endif
   let items = []
   if xolox#lua#getopt('lua_complete_keywords', 1)
-    call extend(items, s:keywords)
+    call extend(items, g:xolox#lua_data#keywords)
   endif
   if xolox#lua#getopt('lua_complete_globals', 1)
-    call extend(items, s:globals)
+    call extend(items, g:xolox#lua_data#globals)
   endif
   if xolox#lua#getopt('lua_complete_library', 1)
-    call extend(items, s:library)
+    call extend(items, g:xolox#lua_data#library)
   endif
   let pattern = xolox#misc#escape#pattern(a:base)
-  return filter(items, 'v:val.word =~ pattern')
+  call filter(items, 'v:val.word =~ pattern')
+  return s:addsignatures(items)
 endfunction
 
 function! s:get_completion_prefix()
   return match(strpart(getline('.'), 0, col('.') - 2), '\w\+\.\?\w*$')
 endfunction
 
-function! xolox#lua#completedynamic(type) " {{{1
-  if xolox#lua#getopt('lua_complete_dynamic', 1)
-    if (a:type == "'" || a:type == '"') && xolox#lua#getopt('lua_complete_omni', 0)
-      if strpart(getline('.'), 0, col('.') - 1) =~ 'require[^''"]*$'
-        return a:type . "\<C-x>\<C-o>"
-      endif
-    elseif a:type == '.' && s:getsynid(1) !~? 'string\|comment\|keyword'
-      let column = col('.') - 1
-      " Gotcha: even though '.' is remapped it counts as a column?
-      if column && getline('.')[column - 1] =~ '\w'
-        " This results in "Pattern not found" when no completion candidates
-        " are available, which is kind of annoying. But I don't know of an
-        " alternative to :silent that can be used inside of <expr>
-        " mappings?!
-        return a:type . "\<C-x>\<C-u>"
-      endif
+function! s:addsignatures(entries)
+  for entry in a:entries
+    let signature = xolox#lua#getsignature(entry.word)
+    if !empty(signature) && signature != entry.word
+      let entry.menu = signature
     endif
+  endfor
+  return a:entries
+endfunction
+
+function! xolox#lua#getsignature(identifier) " {{{1
+  let identifier = substitute(a:identifier, '()$', '', '')
+  let signature = get(g:xolox#lua_data#signatures, identifier, '')
+  if empty(signature)
+    let signature = get(g:xolox#lua_data#signatures, 'string.' . identifier, '')
   endif
-  return a:type
+  if empty(signature)
+    let signature = get(g:xolox#lua_data#signatures, 'file:' . identifier, '')
+  endif
+  return signature
 endfunction
 
 function! xolox#lua#omnifunc(init, base) " {{{1
@@ -298,6 +315,7 @@ function! xolox#lua#omnifunc(init, base) " {{{1
   endif
   if !exists('s:omnifunc_variables')
     let s:omnifunc_variables = xolox#lua#getomnivariables(s:omnifunc_modules)
+    call s:addsignatures(s:omnifunc_variables)
   endif
   " FIXME When you type "require'" without a space in between
   " the getline('.') call below returns an empty string?!
@@ -308,7 +326,7 @@ function! xolox#lua#omnifunc(init, base) " {{{1
     return s:omnifunc_variables
   else
     let pattern = xolox#misc#escape#pattern(a:base)
-    return filter(copy(s:omnifunc_variables), 'v:val =~ pattern')
+    return filter(copy(s:omnifunc_variables), 'v:val.word =~ pattern')
   endif
 endfunction
 
@@ -326,18 +344,6 @@ function! xolox#lua#getomnimodules() " {{{1
   call xolox#misc#timer#stop(msg, s:script, len(modules), starttime)
   return modules
 endfunction
-
-function! xolox#lua#getomnivariables(modules) " {{{1
-  let starttime = xolox#misc#timer#start()
-  let output = xolox#lua#dofile(s:omnicomplete_script, a:modules)
-  let variables = split(output, "\n")
-  call sort(variables, 1)
-  let msg = "%s: Collected %i variables for omni completion in %s"
-  call xolox#misc#timer#stop(msg, s:script, len(variables), starttime)
-  return variables
-endfunction
-
-let s:omnicomplete_script = expand('<sfile>:p:h:h:h') . '/misc/lua-ftplugin/omnicomplete.lua'
 
 function! s:expandsearchpath(searchpath, modules)
   " Collect the names of all installed modules by traversing the search paths.
@@ -376,218 +382,59 @@ function! s:expandsearchpath(searchpath, modules)
   endfor
 endfunction
 
+function! xolox#lua#getomnivariables(modules) " {{{1
+  let starttime = xolox#misc#timer#start()
+  let output = xolox#lua#dofile(s:omnicomplete_script, a:modules)
+  let variables = eval('[' . substitute(output, '\_s\+', ',', 'g') . ']')
+  call sort(variables, 1)
+  let msg = "%s: Collected %i variables for omni completion in %s"
+  call xolox#misc#timer#stop(msg, s:script, len(variables), starttime)
+  return variables
+endfunction
+
+let s:omnicomplete_script = expand('<sfile>:p:h:h:h') . '/misc/lua-ftplugin/omnicomplete.lua'
+
+function! xolox#lua#completedynamic(type) " {{{1
+  if xolox#lua#getopt('lua_complete_dynamic', 1)
+    if (a:type == "'" || a:type == '"') && xolox#lua#getopt('lua_complete_omni', 0)
+      if strpart(getline('.'), 0, col('.') - 1) =~ 'require[^''"]*$'
+        return a:type . "\<C-x>\<C-o>"
+      endif
+    elseif a:type == '.' && s:getsynid(1) !~? 'string\|comment\|keyword'
+      let column = col('.') - 1
+      " Gotcha: even though '.' is remapped it counts as a column?
+      if column && getline('.')[column - 1] =~ '\w'
+        " This results in "Pattern not found" when no completion candidates
+        " are available, which is kind of annoying. But I don't know of an
+        " alternative to :silent that can be used inside of <expr>
+        " mappings?!
+        if xolox#lua#getopt('lua_complete_omni', 0)
+          return a:type . "\<C-x>\<C-o>"
+        else
+          return a:type . "\<C-x>\<C-u>"
+        endif
+      endif
+    endif
+  endif
+  return a:type
+endfunction
+
 function! xolox#lua#dofile(pathname, arguments) " {{{1
-  " First try to use the Lua Interface for Vim.
-  try
-    call xolox#misc#msg#debug("%s: Trying Lua Interface for Vim ..", s:script)
+  if has('lua')
+    " Use the Lua Interface for Vim.
     redir => output
     lua arg = vim.eval('a:arguments')
     execute 'silent luafile' fnameescape(a:pathname)
     redir END
-    if !empty(output)
-      return output
-    endif
-  catch
-    redir END
-    call xolox#misc#msg#warn("%s: %s (at %s)", s:script, v:exception, v:throwpoint)
-  endtry
-  " Fall back to the command line Lua interpreter.
-  call xolox#misc#msg#debug("Falling back to external Lua interpreter ..")
-  let output = system(join(['lua', a:pathname] + a:arguments))
-  if v:shell_error
-    let msg = "%s: Failed to retrieve omni completion candidates (output: '%s')"
-    call xolox#misc#msg#warn(msg, s:script, output)
-    return ''
   else
-  return output
+    " Use the command line Lua interpreter.
+    let output = xolox#misc#str#trim(system(join(['lua', a:pathname] + a:arguments)))
+    if v:shell_error
+      let msg = "%s: Failed to retrieve omni completion candidates (output: '%s')"
+      call xolox#misc#msg#warn(msg, s:script, output)
+    endif
+  endif
+  return xolox#misc#str#trim(output)
 endfunction
-
-" }}}
-
-" Enable line continuation.
-let s:cpo_save = &cpo
-set cpoptions-=C
-
-let s:keywords = [
-      \ { 'word': "and", 'kind': 'k' },
-      \ { 'word': "break", 'kind': 'k' },
-      \ { 'word': "do", 'kind': 'k' },
-      \ { 'word': "else", 'kind': 'k' },
-      \ { 'word': "elseif", 'kind': 'k' },
-      \ { 'word': "end", 'kind': 'k' },
-      \ { 'word': "false", 'kind': 'k' },
-      \ { 'word': "for", 'kind': 'k' },
-      \ { 'word': "function", 'kind': 'k' },
-      \ { 'word': "if", 'kind': 'k' },
-      \ { 'word': "in", 'kind': 'k' },
-      \ { 'word': "local", 'kind': 'k' },
-      \ { 'word': "nil", 'kind': 'k' },
-      \ { 'word': "not", 'kind': 'k' },
-      \ { 'word': "or", 'kind': 'k' },
-      \ { 'word': "repeat", 'kind': 'k' },
-      \ { 'word': "return", 'kind': 'k' },
-      \ { 'word': "then", 'kind': 'k' },
-      \ { 'word': "true", 'kind': 'k' },
-      \ { 'word': "until", 'kind': 'k' },
-      \ { 'word': "while", 'kind': 'k' }]
-
-let s:globals = [
-      \ { 'word': "_G", 'kind': 'v' },
-      \ { 'word': "_VERSION", 'kind': 'v' },
-      \ { 'word': "arg", 'kind': 'v' },
-      \ { 'word': "assert()", 'kind': 'f' },
-      \ { 'word': "collectgarbage()", 'kind': 'f' },
-      \ { 'word': "coroutine", 'kind': 'v' },
-      \ { 'word': "debug", 'kind': 'v' },
-      \ { 'word': "dofile()", 'kind': 'f' },
-      \ { 'word': "error()", 'kind': 'f' },
-      \ { 'word': "gcinfo()", 'kind': 'f' },
-      \ { 'word': "getfenv()", 'kind': 'f' },
-      \ { 'word': "getmetatable()", 'kind': 'f' },
-      \ { 'word': "io", 'kind': 'v' },
-      \ { 'word': "ipairs()", 'kind': 'f' },
-      \ { 'word': "load()", 'kind': 'f' },
-      \ { 'word': "loadfile()", 'kind': 'f' },
-      \ { 'word': "loadstring()", 'kind': 'f' },
-      \ { 'word': "math", 'kind': 'v' },
-      \ { 'word': "module()", 'kind': 'f' },
-      \ { 'word': "newproxy()", 'kind': 'f' },
-      \ { 'word': "next()", 'kind': 'f' },
-      \ { 'word': "os", 'kind': 'v' },
-      \ { 'word': "package", 'kind': 'v' },
-      \ { 'word': "pairs()", 'kind': 'f' },
-      \ { 'word': "pcall()", 'kind': 'f' },
-      \ { 'word': "prettyprint()", 'kind': 'f' },
-      \ { 'word': "print()", 'kind': 'f' },
-      \ { 'word': "rawequal()", 'kind': 'f' },
-      \ { 'word': "rawget()", 'kind': 'f' },
-      \ { 'word': "rawset()", 'kind': 'f' },
-      \ { 'word': "require()", 'kind': 'f' },
-      \ { 'word': "select()", 'kind': 'f' },
-      \ { 'word': "setfenv()", 'kind': 'f' },
-      \ { 'word': "setmetatable()", 'kind': 'f' },
-      \ { 'word': "string", 'kind': 'v' },
-      \ { 'word': "table", 'kind': 'v' },
-      \ { 'word': "tonumber()", 'kind': 'f' },
-      \ { 'word': "tostring()", 'kind': 'f' },
-      \ { 'word': "type()", 'kind': 'f' },
-      \ { 'word': "unpack()", 'kind': 'f' },
-      \ { 'word': "xpcall()", 'kind': 'f' }]
-
-let s:library = [
-      \ { 'word': "coroutine.create()", 'kind': 'f' },
-      \ { 'word': "coroutine.resume()", 'kind': 'f' },
-      \ { 'word': "coroutine.running()", 'kind': 'f' },
-      \ { 'word': "coroutine.status()", 'kind': 'f' },
-      \ { 'word': "coroutine.wrap()", 'kind': 'f' },
-      \ { 'word': "coroutine.yield()", 'kind': 'f' },
-      \ { 'word': "debug.debug()", 'kind': 'f' },
-      \ { 'word': "debug.getfenv()", 'kind': 'f' },
-      \ { 'word': "debug.gethook()", 'kind': 'f' },
-      \ { 'word': "debug.getinfo()", 'kind': 'f' },
-      \ { 'word': "debug.getlocal()", 'kind': 'f' },
-      \ { 'word': "debug.getmetatable()", 'kind': 'f' },
-      \ { 'word': "debug.getregistry()", 'kind': 'f' },
-      \ { 'word': "debug.getupvalue()", 'kind': 'f' },
-      \ { 'word': "debug.setfenv()", 'kind': 'f' },
-      \ { 'word': "debug.sethook()", 'kind': 'f' },
-      \ { 'word': "debug.setlocal()", 'kind': 'f' },
-      \ { 'word': "debug.setmetatable()", 'kind': 'f' },
-      \ { 'word': "debug.setupvalue()", 'kind': 'f' },
-      \ { 'word': "debug.traceback()", 'kind': 'f' },
-      \ { 'word': "io.close()", 'kind': 'f' },
-      \ { 'word': "io.flush()", 'kind': 'f' },
-      \ { 'word': "io.input()", 'kind': 'f' },
-      \ { 'word': "io.lines()", 'kind': 'f' },
-      \ { 'word': "io.open()", 'kind': 'f' },
-      \ { 'word': "io.output()", 'kind': 'f' },
-      \ { 'word': "io.popen()", 'kind': 'f' },
-      \ { 'word': "io.read()", 'kind': 'f' },
-      \ { 'word': "io.size()", 'kind': 'f' },
-      \ { 'word': "io.stderr", 'kind': 'm' },
-      \ { 'word': "io.stdin", 'kind': 'm' },
-      \ { 'word': "io.stdout", 'kind': 'm' },
-      \ { 'word': "io.tmpfile()", 'kind': 'f' },
-      \ { 'word': "io.type()", 'kind': 'f' },
-      \ { 'word': "io.write()", 'kind': 'f' },
-      \ { 'word': "math.abs()", 'kind': 'f' },
-      \ { 'word': "math.acos()", 'kind': 'f' },
-      \ { 'word': "math.asin()", 'kind': 'f' },
-      \ { 'word': "math.atan()", 'kind': 'f' },
-      \ { 'word': "math.atan2()", 'kind': 'f' },
-      \ { 'word': "math.ceil()", 'kind': 'f' },
-      \ { 'word': "math.cos()", 'kind': 'f' },
-      \ { 'word': "math.cosh()", 'kind': 'f' },
-      \ { 'word': "math.deg()", 'kind': 'f' },
-      \ { 'word': "math.exp()", 'kind': 'f' },
-      \ { 'word': "math.floor()", 'kind': 'f' },
-      \ { 'word': "math.fmod()", 'kind': 'f' },
-      \ { 'word': "math.frexp()", 'kind': 'f' },
-      \ { 'word': "math.huge", 'kind': 'm' },
-      \ { 'word': "math.ldexp()", 'kind': 'f' },
-      \ { 'word': "math.log()", 'kind': 'f' },
-      \ { 'word': "math.log10()", 'kind': 'f' },
-      \ { 'word': "math.max()", 'kind': 'f' },
-      \ { 'word': "math.min()", 'kind': 'f' },
-      \ { 'word': "math.mod()", 'kind': 'f' },
-      \ { 'word': "math.modf()", 'kind': 'f' },
-      \ { 'word': "math.pi", 'kind': 'm' },
-      \ { 'word': "math.pow()", 'kind': 'f' },
-      \ { 'word': "math.rad()", 'kind': 'f' },
-      \ { 'word': "math.random()", 'kind': 'f' },
-      \ { 'word': "math.randomseed()", 'kind': 'f' },
-      \ { 'word': "math.sin()", 'kind': 'f' },
-      \ { 'word': "math.sinh()", 'kind': 'f' },
-      \ { 'word': "math.sqrt()", 'kind': 'f' },
-      \ { 'word': "math.tan()", 'kind': 'f' },
-      \ { 'word': "math.tanh()", 'kind': 'f' },
-      \ { 'word': "os.clock()", 'kind': 'f' },
-      \ { 'word': "os.date()", 'kind': 'f' },
-      \ { 'word': "os.difftime()", 'kind': 'f' },
-      \ { 'word': "os.execute()", 'kind': 'f' },
-      \ { 'word': "os.exit()", 'kind': 'f' },
-      \ { 'word': "os.getenv()", 'kind': 'f' },
-      \ { 'word': "os.remove()", 'kind': 'f' },
-      \ { 'word': "os.rename()", 'kind': 'f' },
-      \ { 'word': "os.setlocale()", 'kind': 'f' },
-      \ { 'word': "os.time()", 'kind': 'f' },
-      \ { 'word': "os.tmpname()", 'kind': 'f' },
-      \ { 'word': "package.config", 'kind': 'm' },
-      \ { 'word': "package.cpath", 'kind': 'm' },
-      \ { 'word': "package.loaded", 'kind': 'm' },
-      \ { 'word': "package.loaders", 'kind': 'm' },
-      \ { 'word': "package.loadlib()", 'kind': 'f' },
-      \ { 'word': "package.path", 'kind': 'm' },
-      \ { 'word': "package.preload", 'kind': 'm' },
-      \ { 'word': "package.seeall()", 'kind': 'f' },
-      \ { 'word': "string.byte()", 'kind': 'f' },
-      \ { 'word': "string.char()", 'kind': 'f' },
-      \ { 'word': "string.dump()", 'kind': 'f' },
-      \ { 'word': "string.find()", 'kind': 'f' },
-      \ { 'word': "string.format()", 'kind': 'f' },
-      \ { 'word': "string.gfind()", 'kind': 'f' },
-      \ { 'word': "string.gmatch()", 'kind': 'f' },
-      \ { 'word': "string.gsplit()", 'kind': 'f' },
-      \ { 'word': "string.gsub()", 'kind': 'f' },
-      \ { 'word': "string.len()", 'kind': 'f' },
-      \ { 'word': "string.lower()", 'kind': 'f' },
-      \ { 'word': "string.match()", 'kind': 'f' },
-      \ { 'word': "string.rep()", 'kind': 'f' },
-      \ { 'word': "string.reverse()", 'kind': 'f' },
-      \ { 'word': "string.sub()", 'kind': 'f' },
-      \ { 'word': "string.upper()", 'kind': 'f' },
-      \ { 'word': "table.concat()", 'kind': 'f' },
-      \ { 'word': "table.foreach()", 'kind': 'f' },
-      \ { 'word': "table.foreachi()", 'kind': 'f' },
-      \ { 'word': "table.getn()", 'kind': 'f' },
-      \ { 'word': "table.insert()", 'kind': 'f' },
-      \ { 'word': "table.maxn()", 'kind': 'f' },
-      \ { 'word': "table.remove()", 'kind': 'f' },
-      \ { 'word': "table.setn()", 'kind': 'f' },
-      \ { 'word': "table.sort()", 'kind': 'f' }]
-
-" Restore compatibility options.
-let &cpo = s:cpo_save
-unlet s:cpo_save
 
 " vim: ts=2 sw=2 et
