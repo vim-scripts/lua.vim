@@ -1,0 +1,18 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=3625
+
+The Lua file type plug-in for Vim makes it easier to work with Lua source code in Vim by providing the following features:
+
+  The 'includeexpr' option is set so that the gf (go to file) mapping knows how to resolve Lua module names using package.path
+  The 'include' option is set so that Vim follows dofile(), loadfile() and require() calls when looking for identifiers in included files (this works together with the 'includeexpr' option)
+  An automatic command is installed that runs "luac -p" when you save your Lua scripts. If luac reports any errors they are shown in the quick-fix list and Vim jumps to the line of the first error. If "luac -p" doesnt report any errors a check for undefined global variables is performed by parsing the output of "luac -p -l"
+  <F1> on a Lua function or 'method' call will try to open the relevant documentation in the Lua Reference for Vim
+  The 'completefunc' option is set to allow completion of Lua 5.1 keywords, global variables and library members using Control-X Control-U
+  Several text-objects are defined so you can jump between blocks and functions
+  A pretty nifty hack of the matchit plug-in is included: When the cursor is on a function or return keyword the % mapping cycles between the relevant keywords (function, return, end), this also works for branching statements (if, elseif, else, end) and looping statements (for, while, repeat, until, end)
+
+For more information about the plug-in please refer to its homepage or the project page on GitHub:
+
+  http://peterodding.com/code/vim/lua-ftplugin
+  http://github.com/xolox/vim-lua-ftplugin
+
+If you have questions, bug reports, suggestions, etc. the author can be contacted at peter@peterodding.com. If you like this plug-in please vote for it below!
