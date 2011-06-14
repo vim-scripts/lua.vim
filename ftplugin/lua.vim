@@ -3,7 +3,10 @@
 " Author: Peter Odding <peter@peterodding.com>
 " Last Change: June 14, 2011
 " URL: http://peterodding.com/code/vim/lua-ftplugin
-" Version: 0.5.6
+" Version: 0.6
+
+" Support for automatic update using the GLVS plug-in.
+" GetLatestVimScripts: 3625 1 :AutoInstall: lua.zip
 
 if exists('b:did_ftplugin')
   finish
@@ -27,6 +30,10 @@ call add(s:undo_ftplugin, 'setlocal inc< inex<')
 " Enable completion of Lua keywords, globals and library members. {{{1
 setlocal completefunc=xolox#lua#completefunc
 call add(s:undo_ftplugin, 'setlocal completefunc<')
+
+" Enable dynamic completion by searching "package.path" and "package.cpath". {{{1
+setlocal omnifunc=xolox#lua#omnifunc
+call add(s:undo_ftplugin, 'setlocal omnifunc<')
 
 " Set a filename filter for the Windows file open/save dialogs. {{{1
 if has('gui_win32') && !exists('b:browsefilter')
