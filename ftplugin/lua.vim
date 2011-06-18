@@ -1,12 +1,8 @@
 " Vim file type plug-in
 " Language: Lua 5.1
 " Author: Peter Odding <peter@peterodding.com>
-" Last Change: June 15, 2011
+" Last Change: June 18, 2011
 " URL: http://peterodding.com/code/vim/lua-ftplugin
-" Version: 0.6.8
-
-" Support for automatic update using the GLVS plug-in.
-" GetLatestVimScripts: 3625 1 :AutoInstall: lua.zip
 
 if exists('b:did_ftplugin')
   finish
@@ -48,12 +44,6 @@ call add(s:undo_ftplugin, 'delcommand CheckSyntax')
 " Define a buffer local command to manually check for global variables.
 command! -bar -bang -buffer CheckGlobals call xolox#lua#checkglobals(<q-bang> == '!')
 call add(s:undo_ftplugin, 'delcommand CheckGlobals')
-
-" Automatic commands to check for syntax errors and undefined globals. {{{1
-augroup PluginFileTypeLua
-  autocmd! BufWritePost <buffer> call xolox#lua#autocheck()
-  call add(s:undo_ftplugin, 'autocmd! PluginFileTypeLua BufWritePost <buffer>')
-augroup END
 
 " Define mappings for context-sensitive help using Lua Reference for Vim. {{{1
 imap <buffer> <F1> <C-o>:call xolox#lua#help()<Cr>
