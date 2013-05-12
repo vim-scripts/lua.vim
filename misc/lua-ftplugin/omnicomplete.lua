@@ -3,7 +3,7 @@
 --[[
 
 Author: Peter Odding <peter@peterodding.com>
-Last Change: November 25, 2011
+Last Change: May 12, 2013
 URL: http://peterodding.com/code/vim/lua-ftplugin
 
 This Lua script is executed by the Lua file type plug-in for Vim to provide
@@ -29,7 +29,12 @@ local function addmatch(word, kind, desc)
   if not desc then
     print(string.format("{'word':'%s','kind':'%s'}", word, kind))
   else
-    print(string.format("{'word':'%s','kind':'%s','menu':'%s'}", word, kind, (desc:gsub('\n', ' '))))
+    -- Make sure we generate valid Vim script expressions (this is probably
+    -- still not right).
+    desc = desc:gsub('\n', '\\n')
+               :gsub('\r', '\\r')
+               :gsub("'", "''")
+    print(string.format("{'word':'%s','kind':'%s','menu':'%s'}", word, kind, desc))
   end
 end
 
@@ -74,7 +79,8 @@ end
 
 -- Load installed modules.
 -- XXX What if module loading has side effects? It shouldn't, but still...
-for _, modulename in ipairs(arg) do
+for i = 1, #arg do
+  local modulename = arg[i]
   local status, module = pcall(require, modulename)
   if status and module and not _G[modulename] then
     _G[modulename] = module
