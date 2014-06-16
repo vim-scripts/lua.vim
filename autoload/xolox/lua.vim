@@ -1,9 +1,9 @@
 " Vim auto-load script
 " Author: Peter Odding <peter@peterodding.com>
-" Last Change: August 31, 2013
+" Last Change: June 16, 2014
 " URL: http://peterodding.com/code/vim/lua-ftplugin
 
-let g:xolox#lua#version = '0.7.13'
+let g:xolox#lua#version = '0.7.17'
 let s:miscdir = expand('<sfile>:p:h:h:h') . '/misc/lua-ftplugin'
 let s:omnicomplete_script = s:miscdir . '/omnicomplete.lua'
 let s:globals_script = s:miscdir . '/globals.lua'
@@ -54,10 +54,11 @@ endfunction
 
 function! xolox#lua#autocheck() " {{{1
   if &filetype == 'lua'
+    let success = 1
     if xolox#misc#option#get('lua_check_syntax', 1)
-      call xolox#lua#checksyntax()
+      let success = xolox#lua#checksyntax()
     endif
-    if xolox#misc#option#get('lua_check_globals', 0) && empty(getqflist())
+    if xolox#misc#option#get('lua_check_globals', 0) && success
       call xolox#lua#checkglobals(0)
     endif
   endif
@@ -73,17 +74,18 @@ function! xolox#lua#checksyntax() " {{{1
     let message .= " automatic syntax checking for Lua scripts."
     let g:lua_check_syntax = 0
     call xolox#misc#msg#warn(message, g:xolox#lua#version)
-    return
+    return 1
   endif
   " Check for errors using my shell.vim plug-in so that executing
   " luac.exe on Windows doesn't pop up the nasty console window.
+  call xolox#misc#msg#debug("lua.vim %s: Checking syntax of '%s' using Lua compiler ..", g:xolox#lua#version, expand('%'))
   let command = [compiler_name, compiler_args, xolox#misc#escape#shell(expand('%'))]
   let output = xolox#misc#os#exec({'command': join(command) . ' 2>&1', 'check': 0})['stdout']
   if empty(output)
     " Clear location list.
     call setloclist(winnr(), [], 'r')
     lclose
-    return
+    return 1
   endif
   " Save the errors to a file we can load with :lgetfile.
   let errorfile = tempname()
@@ -112,6 +114,7 @@ function! xolox#lua#checksyntax() " {{{1
     " Cleanup the file with errors.
     call delete(errorfile)
   endtry
+  return 0
 endfunction
 
 function! s:highlighterrors()
@@ -129,7 +132,9 @@ function! s:highlighterrors()
 endfunction
 
 function! xolox#lua#checkglobals(verbose) " {{{1
-  let output = xolox#lua#dofile(s:globals_script, [expand('%'), a:verbose])
+  let curfile = expand('%')
+  call xolox#misc#msg#debug("lua.vim %s: Checking for undefined globals in '%s' using '%s' ..", g:xolox#lua#version, curfile, s:globals_script)
+  let output = xolox#lua#dofile(s:globals_script, [curfile, a:verbose])
   call setqflist(eval('[' . join(output, ',') . ']'), 'r')
   cwindow
 endfunction
@@ -469,17 +474,36 @@ endfunction
 function! xolox#lua#dofile(pathname, arguments) " {{{1
   if has('lua')
     " Use the Lua Interface for Vim.
+    call xolox#misc#msg#debug("lua.vim %s: Running '%s' using Lua Interface for Vim ..", g:xolox#lua#version, a:pathname)
     redir => output
-    lua arg = vim.eval('a:arguments')
-    execute 'silent luafile' fnameescape(a:pathname)
+    " https://github.com/xolox/vim-lua-ftplugin/pull/23 reports that somewhere
+    " in the communication between Vim and Lua someone switches from one based
+    " indexes to zero based indexes, breaking the Vim plug-in. I haven't been
+    " able to reproduce this but the following code is intended to compensate
+    " should the problem occur. As a bonus it's compatible with how the Lua
+    " interpreter runs Lua scripts :-)
+    silent lua << EOL
+      local script = vim.eval('a:pathname')
+      arg = vim.eval('a:arguments')
+      if arg[0] == nil then
+        -- Keep the list order, just set arg[0] to the pathname of the script.
+        arg[0] = script
+      else
+        -- Insert the pathname of the script in arg[0], shifting up arguments.
+        table.insert(arg, 0, script)
+      end
+      dofile(script)
+EOL
     redir END
     return split(output, "\n")
   else
     " Use the command line Lua interpreter.
-    let qpath = xolox#misc#escape#shell(a:pathname)
-    let qargs = join(map(a:arguments, 'xolox#misc#escape#shell(v:val)'))
-    " TODO Make name of Lua executable configurable!
-    return xolox#misc#os#exec({'command': printf('lua %s %s', qpath, qargs)})['stdout']
+    call xolox#misc#msg#debug("lua.vim %s: Running '%s' using command line Lua interpreter ..", g:xolox#lua#version, a:pathname)
+    let interpreter = xolox#misc#escape#shell(xolox#misc#option#get('lua_interpreter_path', 'lua'))
+    let pathname = xolox#misc#escape#shell(a:pathname)
+    let arguments = join(map(a:arguments, 'xolox#misc#escape#shell(v:val)'))
+    let command = printf('%s %s %s', interpreter, pathname, arguments)
+    return xolox#misc#os#exec({'command': command})['stdout']
   endif
 endfunction
 
