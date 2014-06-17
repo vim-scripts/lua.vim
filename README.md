@@ -8,7 +8,7 @@ The [Lua][lua] file type plug-in for [Vim][vim] makes it easier to work with Lua
 
  * An automatic command is installed that runs `luac -p` when you save your Lua scripts. If `luac` reports any errors they are shown in the quick-fix list and Vim jumps to the line of the first error. If `luac -p` doesn't report any errors a check for undefined global variables is performed by parsing the output of `luac -p -l`
 
- * `<F1>` on a Lua function or 'method' call will try to open the relevant documentation in the [Lua Reference for Vim][lrv]
+ * `K` (normal mode) and `<F1>` (insert mode) on a Lua function or 'method' call will try to open the relevant documentation in the [Lua Reference for Vim][lrv]
 
  * The ['completefunc'][cfu] option is set to allow completion of Lua 5.1 keywords, global variables and library members using Control-X Control-U
 
@@ -65,6 +65,10 @@ You can manually check the globals using the `:CheckGlobals` command.
 ### The `lua_interpreter_path` option
 
 The name or path of the Lua interpreter used to evaluate Lua scripts used by the plug-in (for example the script that checks for undefined global variables, see `:LuaCheckGlobals`).
+
+### The `lua_internal` option
+
+If you're running a version of Vim that supports the Lua Interface for Vim (see [if_lua.txt][if_lua.txt]) then all Lua code evaluated by the Lua file type plug-in is evaluated using the Lua Interface for Vim. If the Lua Interface for Vim is not available the plug-in falls back to using an external Lua interpreter. You can set this to false (0) to force the plug-in to use an external Lua interpreter.
 
 ### The `lua_compiler_name` option
 
@@ -165,6 +169,7 @@ This software is licensed under the [MIT license](http://en.wikipedia.org/wiki/M
 [gf]: http://vimdoc.sourceforge.net/htmldoc/editing.html#gf
 [github-lua-ftplugin]: http://github.com/xolox/vim-lua-ftplugin
 [github-misc]: http://github.com/xolox/vim-misc
+[if_lua.txt]: http://vimdoc.sourceforge.net/htmldoc/if_lua.html#if_lua.txt
 [inc]: http://vimdoc.sourceforge.net/htmldoc/options.html#%27include%27
 [inex]: http://vimdoc.sourceforge.net/htmldoc/options.html#%27includeexpr%27
 [ll]: http://lua-users.org/wiki/LuaLint

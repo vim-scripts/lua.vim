@@ -3,7 +3,7 @@
 " Last Change: June 17, 2014
 " URL: http://peterodding.com/code/vim/lua-ftplugin
 
-let g:xolox#lua#version = '0.7.19'
+let g:xolox#lua#version = '0.7.21'
 let s:miscdir = expand('<sfile>:p:h:h:h') . '/misc/lua-ftplugin'
 let s:omnicomplete_script = s:miscdir . '/omnicomplete.lua'
 let s:globals_script = s:miscdir . '/globals.lua'
@@ -25,7 +25,7 @@ endfunction
 
 function! xolox#lua#getsearchpath(envvar, luavar) " {{{1
   let path = ''
-  if has('lua')
+  if xolox#misc#option#get('lua_internal', has('lua'))
     " Try to get the search path using the Lua Interface for Vim.
     try
       redir => path
@@ -42,7 +42,9 @@ function! xolox#lua#getsearchpath(envvar, luavar) " {{{1
       call xolox#misc#msg#debug("lua.vim %s: Got %s from %s", g:xolox#lua#version, a:luavar, a:envvar)
     else
       try
-        let path = xolox#misc#os#exec({'command': 'lua -e "io.write(' . a:luavar . ')"'})['stdout'][0]
+        let interpreter = xolox#misc#escape#shell(xolox#misc#option#get('lua_interpreter_path', 'lua'))
+        let command = printf('%s -e "io.write(%s)"', interpreter, a:luavar)
+        let path = xolox#misc#os#exec({'command': command})['stdout'][0]
         call xolox#misc#msg#debug("lua.vim %s: Got %s from external Lua interpreter", g:xolox#lua#version, a:luavar)
       catch
         call xolox#misc#msg#warn("lua.vim %s: Failed to get %s from external Lua interpreter: %s", g:xolox#lua#version, a:luavar, v:exception)
@@ -476,7 +478,7 @@ function! xolox#lua#tweakoptions() " {{{1
 endfunction
 
 function! xolox#lua#dofile(pathname, arguments) " {{{1
-  if has('lua')
+  if xolox#misc#option#get('lua_internal', has('lua'))
     " Use the Lua Interface for Vim.
     call xolox#misc#msg#debug("lua.vim %s: Running '%s' using Lua Interface for Vim ..", g:xolox#lua#version, a:pathname)
     redir => output
