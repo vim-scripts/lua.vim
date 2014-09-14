@@ -10,7 +10,7 @@ The [Lua][lua] file type plug-in for [Vim][vim] makes it easier to work with Lua
 
  * `K` (normal mode) and `<F1>` (insert mode) on a Lua function or 'method' call will try to open the relevant documentation in the [Lua Reference for Vim][lrv]
 
- * The ['completefunc'][cfu] option is set to allow completion of Lua 5.1 keywords, global variables and library members using Control-X Control-U
+ * The ['completefunc'][cfu] option is set to allow completion of Lua 5.2 keywords, global variables and library members using Control-X Control-U
 
  * The ['omnifunc'][ofu] option is set to allow dynamic completion of the variables defined in all modules installed on the system using Control-X Control-O, however it needs to be explicitly enabled by setting the `lua_complete_omni` option because this functionality may have undesired side effects! When you invoke omni completion after typing `require '` or `require('` you get completion of module names
 
@@ -113,7 +113,7 @@ Now when you type Control-X Control-O Vim will hang for a moment, after which yo
 
 ### The `lua_omni_blacklist` option
 
-If you like the omni completion mode but certain modules are giving you trouble (for example crashing Vim) you can exclude such modules from being loaded by the omni completion. You can do so by setting `lua_omni_module_blacklist` to a list of strings containing Vim regular expression patterns. The patterns are combined as follows:
+If you like the omni completion mode but certain modules are giving you trouble (for example crashing Vim) you can exclude such modules from being loaded by the omni completion. You can do so by setting `lua_omni_blacklist` to a list of strings containing Vim regular expression patterns. The patterns are combined as follows:
 
     " Here's the black list:
     let g:lua_omni_blacklist = ['pl\.strict', 'lgi\..']
@@ -122,6 +122,16 @@ If you like the omni completion mode but certain modules are giving you trouble 
     '^\(pl\.strict\|lgi\..\)$'
 
 The example above prevents the module `pl.strict` and all modules with the prefix `lgi.` from being loaded.
+
+### The `lua_safe_omni_modules` option
+
+To track down modules that cause side effects while loading, setting
+
+    :let g:lua_safe_omni_modules = 1
+
+restricts the modules to be loaded to the standard Lua modules - which should be safe to load - and provides a list of modules that would have been loaded if this option was not set via the `:messages` command. With this list, the `lua_omni_blacklist` can be iteratively refined to exclude offending modules from omni completion module loading.
+
+Note that the ['verbose'] [] option has to be set to 1 or higher for the list to be recorded.
 
 ### The `lua_define_completefunc` option
 
@@ -155,15 +165,18 @@ If you have questions, bug reports, suggestions, etc. the author can be contacte
 
 ## License
 
-This software is licensed under the [MIT license](http://en.wikipedia.org/wiki/MIT_License).
+This software is licensed under the [MIT license](http://en.wikipedia.org/wiki/MIT_License).  
 © 2014 Peter Odding &lt;<peter@peterodding.com>&gt;.
 
+Thanks go out to everyone who has helped to improve the Lua file type plug-in for Vim (whether through pull requests, bug reports or personal e-mails).
 
+
+['verbose']: http://vimdoc.sourceforge.net/htmldoc/options.html#'verbose'
 ['completefunc']: http://vimdoc.sourceforge.net/htmldoc/options.html#'completefunc'
 ['omnifunc']: http://vimdoc.sourceforge.net/htmldoc/options.html#'omnifunc'
 [cfu]: http://vimdoc.sourceforge.net/htmldoc/options.html#%27completefunc%27
 [dll]: http://en.wikipedia.org/wiki/Dynamic-link_library
-[dof]: http://www.lua.org/manual/5.1/manual.html#pdf-dofile
+[dof]: http://www.lua.org/manual/5.2/manual.html#pdf-dofile
 [download-lua-ftplugin]: http://peterodding.com/code/vim/downloads/lua-ftplugin.zip
 [download-misc]: http://peterodding.com/code/vim/downloads/misc.zip
 [gf]: http://vimdoc.sourceforge.net/htmldoc/editing.html#gf
@@ -173,14 +186,14 @@ This software is licensed under the [MIT license](http://en.wikipedia.org/wiki/M
 [inc]: http://vimdoc.sourceforge.net/htmldoc/options.html#%27include%27
 [inex]: http://vimdoc.sourceforge.net/htmldoc/options.html#%27includeexpr%27
 [ll]: http://lua-users.org/wiki/LuaLint
-[lof]: http://www.lua.org/manual/5.1/manual.html#pdf-loadfile
+[lof]: http://www.lua.org/manual/5.2/manual.html#pdf-loadfile
 [lrv]: http://www.vim.org/scripts/script.php?script_id=1291
 [lua]: http://www.lua.org/
 [mit]: http://vimdoc.sourceforge.net/htmldoc/usr_05.html#matchit-install
 [ofu]: http://vimdoc.sourceforge.net/htmldoc/options.html#%27omnifunc%27
 [pathogen]: http://www.vim.org/scripts/script.php?script_id=2332
-[pp]: http://www.lua.org/manual/5.1/manual.html#pdf-package.path
-[req]: http://www.lua.org/manual/5.1/manual.html#pdf-require
+[pp]: http://www.lua.org/manual/5.2/manual.html#pdf-package.path
+[req]: http://www.lua.org/manual/5.2/manual.html#pdf-require
 [script]: http://www.vim.org/scripts/script.php?script_id=3625
 [shell]: http://peterodding.com/code/vim/shell/
 [tob]: http://vimdoc.sourceforge.net/htmldoc/motion.html#text-objects
